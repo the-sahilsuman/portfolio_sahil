@@ -3,59 +3,43 @@
 #######################################
 # Stage 1: Install dependencies
 #######################################
-:contentReference[oaicite:1]{index=1}
+FROM node:18-alpine AS deps
 WORKDIR /app
 
-# Dependencies for possible native modules
-:contentReference[oaicite:2]{index=2}
+# Dependencies for native modules (if needed)
+RUN apk add --no-cache libc6-compat
 
-# Copy lock and manifest files for caching
-:contentReference[oaicite:3]{index=3}
+# Copy lock and manifest files (for caching)
+COPY package.json package-lock.json ./
 
-# Install all dependencies
-:contentReference[oaicite:4]{index=4}
+RUN npm ci
 
 #######################################
 # Stage 2: Build the Next.js app
 #######################################
-:contentReference[oaicite:5]{index=5}
+FROM node:18-alpine AS builder
 WORKDIR /app
 
-# Copy installed dependencies
-:contentReference[oaicite:6]{index=6}
-
-# Copy full project
+COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# Build for production
-:contentReference[oaicite:7]{index=7}
+RUN npm run build
 
 #######################################
 # Stage 3: Prepare production image
 #######################################
-:contentReference[oaicite:8]{index=8}
+FROM node:18-alpine AS runner
 WORKDIR /app
+ENV NODE_ENV=production
 
-# Run in production mode
-:contentReference[oaicite:9]{index=9}
-
-# Create non-root user
-:contentReference[oaicite:10]{index=10}
-
-# Copy needed files from builder
-:contentReference[oaicite:11]{index=11}
-:contentReference[oaicite:12]{index=12}
-:contentReference[oaicite:13]{index=13}
-:contentReference[oaicite:14]{index=14}
-
-# Ensure permissions
-:contentReference[oaicite:15]{index=15}
-
-# Use non-root user
+# Create and switch to non-root user
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 USER appuser
 
-# Expose the default Next.js port
-EXPOSE 3000
+COPY --from=builder /app/.next ./.next
+COPY --from=builder /app/public ./public
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/package.json ./package.json
 
-# Start Next.js production server
-:contentReference[oaicite:16]{index=16}
+EXPOSE 3000
+CMD ["npm", "start"]
